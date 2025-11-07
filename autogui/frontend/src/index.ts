@@ -1,37 +1,75 @@
 import { Streamlit, RenderData } from "streamlit-component-lib"
 
-// Add text and a button to the DOM. (You could also add these directly
-// to index.html.)
-const span = document.body.appendChild(document.createElement("span"))
-const textNode = span.appendChild(document.createTextNode(""))
-const button = span.appendChild(document.createElement("button"))
-button.textContent = "Click Me!"
+const rootDoc = (typeof window !== "undefined" && window.parent && window.parent.document)
+? window.parent.document
+: document;
 
-// Add a click handler to our button. It will send data back to Streamlit.
-let numClicks = 0
-let isFocused = false
-button.onclick = function (): void {
-  // Increment numClicks, and pass the new value back to
-  // Streamlit via `Streamlit.setComponentValue`.
-  numClicks += 1
-  Streamlit.setComponentValue(numClicks)
+declare global{
+  interface Window {
+    autogui_instances?: Document[];
+  }
 }
 
-button.onfocus = function (): void {
-  isFocused = true
+if (rootDoc.defaultView && !('autogui_instances' in rootDoc.defaultView)) {
+  rootDoc.defaultView.autogui_instances = [];
+}
+rootDoc.defaultView?.autogui_instances?.push(document);
+
+const instance_num = rootDoc.defaultView?.autogui_instances?.indexOf(document);
+
+let component_key = "";
+
+
+function getButton(){
+  return rootDoc.querySelector(`div[class*="${component_key}-autogui-btn"]`)?.querySelector("button");
 }
 
-button.onblur = function (): void {
-  isFocused = false
+
+function rerenderButton(){
+  const btn = getButton();
+  if(btn){
+    const op = '0.2';
+    btn.style.border = "none";
+    btn.style.backgroundImage = `url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='8' ry='8' stroke='%23333' stroke-width='3' stroke-dasharray='6%2c 14' stroke-dashoffset='0' stroke-linecap='square' stroke-opacity='${op}'/%3e%3c/svg%3e")`;
+
+    const test = rootDoc.defaultView?.getComputedStyle(btn).font;
+
+    if (btn.childNodes.length == 1) {
+      const lbl = btn.appendChild(document.createElement("span"))
+      lbl.appendChild(document.createTextNode(`Shift + ${(instance_num ?? 0) + 1} to edit`));
+      lbl.style.textIndent = "10px";
+      lbl.style.fontSize = "12px";
+      lbl.style.opacity = op;
+      (btn.firstChild as HTMLElement).style.opacity = op;
+    }
+  }
 }
 
-/**
- * The component's render function. This will be called immediately after
- * the component is initially loaded, and then again every time the
- * component gets new data from Python.
- */
+var keydown = function (event: KeyboardEvent) {
+  //const isCtrlCmd = event.ctrlKey || event.metaKey;
+  const isShift = event.shiftKey;
+  const number = "!@#$%^&*()".indexOf(event.key);
+
+  if (event.shiftKey && number > -1) {
+    if(number == instance_num){
+      getButton()?.click();
+      getButton()?.blur();
+    }
+  }
+}
+
+window.addEventListener("load", () => {
+    rootDoc.addEventListener("keydown", keydown);
+    Streamlit.setComponentReady();
+    Streamlit.setFrameHeight(0);
+});
+
+window.addEventListener("beforeunload", () => {
+    rootDoc.removeEventListener("keydown", keydown);
+});
+    
+
 function onRender(event: Event): void {
-  // Get the RenderData from the event
   const data = (event as CustomEvent<RenderData>).detail
 
   // Maintain compatibility with older versions of Streamlit that don't send
@@ -39,37 +77,23 @@ function onRender(event: Event): void {
   if (data.theme) {
     // Use CSS vars to style our button border. Alternatively, the theme style
     // is defined in the data.theme object.
-    const borderStyling = `1px solid var(${
-      isFocused ? "--primary-color" : "gray"
-    })`
-    button.style.border = borderStyling
-    button.style.outline = borderStyling
+    //const borderStyling = `1px solid var(${
+    //  isFocused ? "--primary-color" : "gray"
+    //})`
+    //button.style.border = borderStyling
+    //button.style.outline = borderStyling
   }
 
-  // Disable our button if necessary.
-  button.disabled = data.disabled
+  component_key = data.args["key"]
 
-  // RenderData.args is the JSON dictionary of arguments sent from the
-  // Python script.
-  let name = data.args["name"]
+  //textNode.textContent = `instance num ${(instance_num ?? 0) + 1}`;
+  setTimeout(rerenderButton, 100);
 
-  // Show "Hello, name!" with a non-breaking space afterwards.
-  textNode.textContent = `Hello, ${name}! ` + String.fromCharCode(160)
-
-  // We tell Streamlit to update our frameHeight after each render event, in
-  // case it has changed. (This isn't strictly necessary for the example
-  // because our height stays fixed, but this is a low-cost function, so
-  // there's no harm in doing it redundantly.)
   Streamlit.setFrameHeight()
 }
 
-// Attach our `onRender` handler to Streamlit's render event.
 Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender)
 
-// Tell Streamlit we're ready to start receiving data. We won't get our
-// first RENDER_EVENT until we call this function.
 Streamlit.setComponentReady()
 
-// Finally, tell Streamlit to update our initial height. We omit the
-// `height` parameter here to have it default to our scrollHeight.
 Streamlit.setFrameHeight()

@@ -12,9 +12,22 @@ import sys
 import importlib.util
 
 
+_RELEASE=True
+
+if not _RELEASE:
+    _component_func = components.declare_component(
+        "autogui",
+        url="http://localhost:3001"
+    )
+else:
+    parent_dir = os.path.dirname(os.path.abspath(__file__))
+    build_dir = os.path.join(parent_dir, "frontend/build")
+    _component_func = components.declare_component("autogui", path=build_dir)
+
+
+
 @st.dialog("AutoGUI settings", width="medium")
 def gen_tool(key, filename):
-
     tab_gen, tab_adj = st.tabs([":material/code_blocks: Generate", ":material/build: Adjust"])
 
     with tab_gen:
@@ -45,13 +58,12 @@ def gen_tool(key, filename):
             with open(filename) as f:
                 resp = code_editor(f.read(), lang="python", options={"wrap":True, "showLineNumbers":True})
 
-            st.markdown(":material/build: <sub>Press Command+Enter to apply changes.</sub>", unsafe_allow_html=True)
+            st.markdown(":material/build: <sub>Press \u2318+Enter to apply changes.</sub>", unsafe_allow_html=True)
 
             if resp.get("type") == "submit":
                 aicodegen.update_code(resp["text"], file_name=filename)
                 st.rerun()
                 
-            
 
 def autogui(
     name,
@@ -62,13 +74,13 @@ def autogui(
     features=None,
     patience=3,
     key=None,
+    icon=":material/touch_app:"
 ):
-
-    if not aicodegen.is_generating():
-        raise Exception("Provide OpenAI credentials")
 
     if key == None:
         key=name
+
+    _ = _component_func(name=name, key=key)
 
     if like==None or args==None:
         name, invars, outvars, system, args = schema.from_parent_caller()
@@ -96,9 +108,8 @@ def autogui(
     #module = str(filename.parent / filename.stem)
     module = str(filename.stem)
 
-    #generate = st.button("", icon=":material/code_blocks:",key=f"{key}-gen", type="primary")
 
-    if st.button("", icon=":material/touch_app:",key=f"{key}-a", use_container_width=True):
+    if st.button("", icon=icon, key=f"{key}-autogui-btn", use_container_width=True):
         gen_tool(key, filename)
     #prompt = st.text_area("prompt", key=f"{key}-prompt")
     gui_area = st.container()
