@@ -6,6 +6,7 @@ import time
 from . import aicodegen
 from . import schema
 from pathlib import Path
+import re
 
 import tempfile
 import sys
@@ -25,46 +26,6 @@ else:
     _component_func = components.declare_component("autogui", path=build_dir)
 
 
-
-@st.dialog("AutoGUI settings", width="medium")
-def gen_tool(key, filename):
-    tab_gen, tab_adj = st.tabs([":material/code_blocks: Generate", ":material/build: Adjust"])
-
-    with tab_gen:
-        prompt = st.text_area("")
-
-        gen_col, add_col, rem_col = st.columns(3)
-        generate = gen_col.button("Generate", icon=":material/code_blocks:",key=f"{key}-gen", type="primary", use_container_width=True)
-        add = add_col.button("Add", icon=":material/add:",key=f"{key}-add", type="secondary", use_container_width=True)
-        remove = rem_col.button("Remove", icon=":material/remove:",key=f"{key}-remove", type="secondary", use_container_width=True)
-
-        if generate:
-            aicodegen.generate_code(prompt, file_name=filename)
-            st.rerun()
-
-        if add:
-            aicodegen.add_code(prompt, file_name=filename)
-            st.rerun()
-
-        if remove:
-            aicodegen.remove_code(prompt, file_name=filename)
-            st.rerun()
-
-    with tab_adj:
-        if not filename.exists():
-            st.write("No generated code. Use Generate tab to add features, and then this tab for fine adjustments.")
-        else:
-            st.markdown(f"<sub>{filename}</sub>", unsafe_allow_html=True)
-            with open(filename) as f:
-                resp = code_editor(f.read(), lang="python", options={"wrap":True, "showLineNumbers":True})
-
-            st.markdown(":material/build: <sub>Press \u2318+Enter to apply changes.</sub>", unsafe_allow_html=True)
-
-            if resp.get("type") == "submit":
-                aicodegen.update_code(resp["text"], file_name=filename)
-                st.rerun()
-                
-
 def autogui(
     name,
     like=None,
@@ -77,8 +38,56 @@ def autogui(
     icon=":material/touch_app:"
 ):
 
+    @st.dialog(f"AutoGUI {name}", width="medium")
+    def gen_tool(filename):
+        tabs = [":material/code_blocks: Generate", ":material/build: Adjust"]
+        if filename.exists():
+            tabs = st.tabs(tabs)
+            placeholder = "Describe features to generate..."
+        else:
+            tabs = [st.container()]
+            placeholder = "Describe features to generate, add, or remove. You can prompt for fixes."
+
+        with tabs[0]:
+            prompt = st.text_area("",placeholder=placeholder)
+
+            btns = st.columns(4 if len(tabs)>1 else 1)
+
+            generate = btns[0].button("Generate", icon=":material/code_blocks:",key=f"{key}-gen", type="primary", use_container_width=True)
+            add = False if len(btns)==1 else btns[1].button("Add", icon=":material/add:",key=f"{key}-add", type="secondary", use_container_width=True)
+            remove = False if len(btns)==1 else btns[2].button("Remove", icon=":material/remove:",key=f"{key}-remove", type="secondary", use_container_width=True)
+            fix = False if len(btns)==1 else btns[3].button("Fix", icon=":material/build:",key=f"{key}-fix", type="secondary", use_container_width=True)
+
+            if generate:
+                aicodegen.generate_code(prompt, file_name=filename)
+                st.rerun()
+
+            if add:
+                aicodegen.add_code(prompt, file_name=filename)
+                st.rerun()
+
+            if remove:
+                aicodegen.remove_code(prompt, file_name=filename)
+                st.rerun()
+
+            if fix:
+                aicodegen.fix_code(prompt, file_name=filename)
+                st.rerun()
+
+        if len(tabs) > 1: # if filename exists, and hence the ajust tab
+            with tabs[1]:
+                st.markdown("Generated code", help=f"at `{filename}`", unsafe_allow_html=True)
+                with open(filename) as f:
+                    resp = code_editor(f.read(), lang="python", options={"wrap":True, "showLineNumbers":True})
+
+                st.markdown(":material/build: <sub>Press \u2318+Enter to apply changes.</sub>", unsafe_allow_html=True)
+
+                if resp.get("type") == "submit":
+                    aicodegen.update_code(resp["text"], file_name=filename)
+                    st.rerun()
+
     if key == None:
-        key=name
+        key=re.sub("[^a-z0-9]","-",name.lower())
 
     _ = _component_func(name=name, key=key)
 
@@ -110,7 +119,7 @@ def autogui(
 
 
     if st.button("", icon=icon, key=f"{key}-autogui-btn", use_container_width=True):
-        gen_tool(key, filename)
+        gen_tool(filename)
     #prompt = st.text_area("prompt", key=f"{key}-prompt")
     gui_area = st.container()
     error_area = st.empty()

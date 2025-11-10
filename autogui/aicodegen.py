@@ -6,40 +6,47 @@ FUNCTION_NAME = "fcn"
 FILE_NAME = "fcn.py"
 SCHEMA = schema.FLOAT_IN_OUT
 
-SYSTEM = f"""
+IO = f"""
 
-You are a coding assistant specialist in streamlit dashboards. Given a list of
-steps, your job is to identify each step and then generate code to accomplish
-such tasks sequentially. Provide UI elements for all parameters and/or inputs
-involved in every step.
-
-Provide only code and nothing else. Do not include markdown backticks.
+You are a coding assistant specialist in streamlit dashboards and have general
+problem solving skills in python. Given a list of steps or features, your job
+is to identify each step and then generate code to accomplish such tasks
+sequentially. Provide UI elements for all parameters and/or inputs involved in
+every step.
 
 The code you generate will be included in function `{{FUNCTION_NAME}}`, which
-takes `{{INPUT_SCHEMA}}` as input arguments and returns
-`{{OUTPUT_SCHEMA}}` as output. Make sure to define unique random keys
-for every streamlit component. Never use streamlit sidebar. Never use any
-streamlit experimental feature. Never use streamlit caching.
+takes `{{INPUT_SCHEMA}}` as input arguments and returns `{{OUTPUT_SCHEMA}}` as
+output. Make sure to define unique keys for every streamlit component, but
+never use any random function for it. Never use streamlit sidebar. Never use
+any streamlit experimental feature. Never use caching.
 
-Each task must be individually detected and their UI and visualization elements
-must be organized, separately, into their respective streamlit expander for
-better user experience.
+Provide only code and nothing else. Never include markdown backticks.
 
-The IO of tasks must be chained as a pipeline. The output of one task must be
-used as the input of the next, and the `{{OUTPUT_SCHEMA}}` is the final result
-to be provided as output.
+Never use streamlit titles or headers. If there are multiple steps, organize
+those in expanders, tabs, or small subheaders. If there are few, or a single
+task, do not enclose in any container, but simply render the due GUI elements.
 
-""".replace("\n"," ")
+Make sure to preserve the definition, input, and output of functiion
+`{{FUNCTION_NAME}}`.
 
-SYSTEM_FIX = f"""
-You are a coding assistant specialist in streamlit and general problem solving
-skills in python. Your job is to fix a given code snippet, given the error
-message.
+ """.replace("\n"," ")
 
-Never include markdown backticks (e.g., '```python```)', or any explanations or
-text other than the new code itsewlf. Make sure to preserve the definition,
-input, and output of function {{FUNCTION_NAME}}.
-""".replace("\n"," ")
+VISUALIZATION = f"""
+
+You are also a specialist in visualization. Make sure to use plots either when
+explicitly requested, or only when necessary, to visualize some parameter
+change, as a preview feature.
+
+If images are associated to GUI components, make sure to organize in columns
+(each group of preview and GUI in a set of columns), so any generated GUI is
+relatable to the visualized result. Visualization on one side, GUI on the
+other.
+
+"""
+
+SYSTEM = f"{IO} {VISUALIZATION}"
+SYSTEM_FIX = f"""{IO} Your job is to fix a given code snippet, given the error
+message.""".replace("\n"," ")
 
 client = AzureOpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),  
@@ -56,6 +63,13 @@ def is_generating():
 
 
 def get_code(prompt, system=SYSTEM, model="gpt-4"):
+    # Templates first, containing variables
+    system = system.format(
+        IO=IO,
+        VISUALIZATION=VISUALIZATION
+    )
+
+    # Then variables, which are possibly mentioned in templates
     system = system.format(
         FUNCTION_NAME=FUNCTION_NAME,
         INPUT_SCHEMA=schema.readable(SCHEMA[0]),
