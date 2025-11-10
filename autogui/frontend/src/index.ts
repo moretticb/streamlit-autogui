@@ -46,6 +46,10 @@ function rerenderButton(){
 }
 
 var keydown = function (event: KeyboardEvent) {
+  const focus = rootDoc.activeElement?.tagName;
+  if (focus  === "INPUT" || focus === "TEXTAREA") {
+    return true
+  }
   //const isCtrlCmd = event.ctrlKey || event.metaKey;
   const isShift = event.shiftKey;
   const number = "!@#$%^&*()".indexOf(event.key);

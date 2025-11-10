@@ -12,7 +12,7 @@ setuptools.setup(
     author_email="caiodba@gmail.com ",
     description="Vibe code inside a streamlit application and prompt for features on the fly.",
     long_description="Vibe code inside a streamlit application and prompt for technical implementations coupled with GUI components on the fly. Give tweaks on top of the generated code if needed.",
-    long_description_content_type="text/markdown",
+    long_description_content_type="text/plain",
     url="https://github.com/moretticb/streamlit-autogui",
     packages=setuptools.find_packages(),
     include_package_data=True,
