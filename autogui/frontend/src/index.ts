@@ -10,8 +10,12 @@ declare global{
   }
 }
 
-if (rootDoc.defaultView && !('autogui_instances' in rootDoc.defaultView)) {
-  rootDoc.defaultView.autogui_instances = [];
+if (rootDoc.defaultView){
+  if(!('autogui_instances' in rootDoc.defaultView)) {
+    rootDoc.defaultView.autogui_instances = [];
+  } else {
+    rootDoc.defaultView.autogui_instances = rootDoc.defaultView?.autogui_instances?.filter((i) => window.getComputedStyle(i.body).display);
+  }
 }
 rootDoc.defaultView?.autogui_instances?.push(document);
 
