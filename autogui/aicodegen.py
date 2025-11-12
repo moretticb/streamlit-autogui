@@ -1,10 +1,18 @@
 from openai import AzureOpenAI
 import os
 from . import schema
+import re
+
+from importlib.metadata import packages_distributions
 
 FUNCTION_NAME = "fcn"
 FILE_NAME = "fcn.py"
 SCHEMA = schema.FLOAT_IN_OUT
+
+class InsufficientCapabilityError(Exception):
+    def __init__(self, packages):
+        message=f"Insufficient capabilities. Please install additional packages to enable this feature. Recommended are: {packages}."
+        super().__init__(message)
 
 IO = f"""
 
@@ -20,7 +28,8 @@ output. Make sure to define unique keys for every streamlit component, but
 never use any random function for it. Never use streamlit sidebar. Never use
 any streamlit experimental feature. Never use caching.
 
-Provide only code and nothing else. Never include markdown backticks.
+Provide only code and nothing else. Never include markdown backticks. Prefer to
+make use of the following packages: {{AVAILABLE_PKGS}}.
 
 Never use streamlit titles or headers. If there are multiple steps, organize
 those in expanders, tabs, or small subheaders. If there are few, or a single
@@ -42,7 +51,7 @@ If images are associated to GUI components, make sure to organize in columns
 relatable to the visualized result. Visualization on one side, GUI on the
 other.
 
-"""
+""".replace("\n"," ")
 
 SYSTEM = f"{IO} {VISUALIZATION}"
 SYSTEM_FIX = f"""{IO} Your job is to fix a given code snippet, given the error
@@ -73,7 +82,8 @@ def get_code(prompt, system=SYSTEM, model="gpt-4"):
     system = system.format(
         FUNCTION_NAME=FUNCTION_NAME,
         INPUT_SCHEMA=schema.readable(SCHEMA[0]),
-        OUTPUT_SCHEMA=schema.readable(SCHEMA[1])
+        OUTPUT_SCHEMA=schema.readable(SCHEMA[1]),
+        AVAILABLE_PKGS=",".join(list(packages_distributions().keys()))
     )
     print("SYSTEM IS",system)
 
@@ -94,7 +104,12 @@ def update_code(code, file_name=FILE_NAME):
 
 
 def generate_code(prompt, system=SYSTEM, file_name=FILE_NAME):
-    update_code(get_code(prompt, system=SYSTEM), file_name=file_name)
+    new_code = get_code(prompt, system=SYSTEM)
+
+    # post processing
+    new_code = add_st_key_suffix(new_code)
+
+    update_code(new_code, file_name=file_name)
     return file_name
 
 
@@ -169,4 +184,15 @@ include markdown backticks. Only the code itself.
         system=SYSTEM_FIX,
         file_name=file_name
     )
+
+
+def add_st_key_suffix(code, suffix="__k"):
+    def gen_key_suffix(re_match):
+        if suffix in re_match.group(2): # alternate pattern if suffix already there from past iteration
+            new_id = re.sub(f'{suffix}[0-9]+',f'{suffix}{re_match.span()[1]}{re_match.span()[0]}',re_match.group(2))
+            return f"{re_match.group(1)}{new_id}{re_match.group(3)}"
+
+        return f"{re_match.group(1)}{re_match.group(2)}__k{re_match.span()[0]}{re_match.span()[1]}{re_match.group(3)}"
+
+    return re.sub(r'(key=[\'"])([^"\']+)([\'"])', gen_key_suffix, code)
     

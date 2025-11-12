@@ -121,23 +121,27 @@ def autogui(
     if st.button("", icon=icon, key=f"{key}-autogui-btn", use_container_width=True):
         gen_tool(filename)
     #prompt = st.text_area("prompt", key=f"{key}-prompt")
-    gui_area = st.container()
+    gui_area = st.empty()
     error_area = st.empty()
 
     if filename.exists():
         p=0
+        lacking_capabilities = []
         while p < patience:
             try:
                 spec = importlib.util.spec_from_file_location(aicodegen.FUNCTION_NAME,str(filename))
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
 
-                with gui_area:
+                with gui_area.container():
                     component_value = module.fcn(**args)
                     error_area.empty()
                     break
 
             except Exception as e:
+                if isinstance(e,ModuleNotFoundError):
+                    lacking_capabilities.append(e.split(' ')[-1])
+
                 aicodegen.fix_code(str(e), file_name=filename)
 
                 spec = importlib.util.spec_from_file_location(aicodegen.FUNCTION_NAME,str(filename))
@@ -147,6 +151,9 @@ def autogui(
                 p=p+1
                 st.write(p)
                 error_area.write(e)
+
+        if len(lacking_capabilities) > 1:
+            raise aicodegen.InsufficientCapabilityError(",".join(lacking_capabilities))
             
 
     #temp_dir.cleanup()
