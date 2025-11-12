@@ -54,8 +54,6 @@ other.
 """.replace("\n"," ")
 
 SYSTEM = f"{IO} {VISUALIZATION}"
-SYSTEM_FIX = f"""{IO} Your job is to fix a given code snippet, given the error
-message.""".replace("\n"," ")
 
 client = AzureOpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),  
@@ -85,6 +83,7 @@ def get_code(prompt, system=SYSTEM, model="gpt-4"):
         OUTPUT_SCHEMA=schema.readable(SCHEMA[1]),
         AVAILABLE_PKGS=",".join(list(packages_distributions().keys()))
     )
+    system = system.replace("\n"," ")
     print("SYSTEM IS",system)
 
     response = client.chat.completions.create(
@@ -130,7 +129,7 @@ yields the following error:
 ```. Generate the new version of the code with no explanations and never include
 markdown backticks. Only the code itself.
 """,
-        system=SYSTEM_FIX,
+        system=SYSTEM,
         file_name=file_name
     )
     
@@ -156,7 +155,7 @@ markdown backticks. Only the code itself. The new features must be appended as
 the last tasks to be executed.
 
 """,
-        system=SYSTEM_FIX,
+        system=SYSTEM,
         file_name=file_name
     )
     
@@ -181,7 +180,7 @@ code. Generate the new version of the code with no explanations and never
 include markdown backticks. Only the code itself.
 
 """,
-        system=SYSTEM_FIX,
+        system=SYSTEM,
         file_name=file_name
     )
 
