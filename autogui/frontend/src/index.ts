@@ -38,6 +38,11 @@ function rerenderButton(){
 
     const test = rootDoc.defaultView?.getComputedStyle(btn).font;
 
+    const visibleComponentDiv = document.defaultView?.frameElement?.parentElement?.parentElement;
+    if(visibleComponentDiv){
+      visibleComponentDiv.style.height="1px";
+    }
+
     if (btn.childNodes.length == 1) {
       const lbl = btn.appendChild(document.createElement("span"))
       lbl.appendChild(document.createTextNode(`Shift + ${(instance_num ?? 0) + 1} to edit`));

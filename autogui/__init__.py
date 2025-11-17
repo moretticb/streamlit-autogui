@@ -31,6 +31,7 @@ COMPACT = 1<<2
 
 def autogui(
     name,
+    init_prompt=None,
     like=None,
     args=None,
     system=None,
@@ -102,7 +103,6 @@ def autogui(
 
     hist_key = f"{key}-hist"
 
-    _ = _component_func(name=name, key=key)
 
     if like==None or args==None:
         name, invars, outvars, system, args = schema.from_parent_caller()
@@ -130,10 +130,15 @@ def autogui(
     #module = str(filename.parent / filename.stem)
     module = str(filename.stem)
 
+    if not filename.exists() and init_prompt:
+        hist = aicodegen.generate_code(init_prompt, file_name=filename, compact_hist=compact_hist)
+        st.session_state[hist_key] = hist if use_hist else None
 
     if st.button("", icon=icon, key=f"{key}-autogui-btn", use_container_width=True):
         gen_tool(filename)
-    #prompt = st.text_area("prompt", key=f"{key}-prompt")
+
+    _ = _component_func(name=name, key=key)
+
     gui_area = st.empty()
     error_area = st.empty()
 
