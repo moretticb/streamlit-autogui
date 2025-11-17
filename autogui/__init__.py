@@ -38,15 +38,16 @@ def autogui(
     icon=":material/touch_app:"
 ):
 
+
     @st.dialog(f"AutoGUI {name}", width="medium")
     def gen_tool(filename):
         tabs = [":material/code_blocks: Generate", ":material/build: Adjust"]
         if filename.exists():
             tabs = st.tabs(tabs)
-            placeholder = "Describe features to generate..."
+            placeholder = "Describe features to generate, add, or remove. You can prompt for fixes."
         else:
             tabs = [st.container()]
-            placeholder = "Describe features to generate, add, or remove. You can prompt for fixes."
+            placeholder = "Describe features to generate..."
 
         with tabs[0]:
             prompt = st.text_area("",placeholder=placeholder)
@@ -58,20 +59,26 @@ def autogui(
             remove = False if len(btns)==1 else btns[2].button("Remove", icon=":material/remove:",key=f"{key}-remove", type="secondary", use_container_width=True)
             fix = False if len(btns)==1 else btns[3].button("Fix", icon=":material/build:",key=f"{key}-fix", type="secondary", use_container_width=True)
 
+            compact_hist=True
+
             if generate:
-                aicodegen.generate_code(prompt, file_name=filename)
+                hist = aicodegen.generate_code(prompt, file_name=filename, compact_hist=compact_hist)
+                st.session_state[hist_key] = hist
                 st.rerun()
 
             if add:
-                aicodegen.add_code(prompt, file_name=filename)
+                hist = aicodegen.add_code(prompt, file_name=filename, hist=st.session_state[hist_key], compact_hist=compact_hist)
+                st.session_state[hist_key] = hist
                 st.rerun()
 
             if remove:
-                aicodegen.remove_code(prompt, file_name=filename)
+                hist = aicodegen.remove_code(prompt, file_name=filename, hist=st.session_state[hist_key], compact_hist=compact_hist)
+                st.session_state[hist_key] = hist
                 st.rerun()
 
             if fix:
-                aicodegen.fix_code(prompt, file_name=filename)
+                hist = aicodegen.fix_code(prompt, file_name=filename, hist=st.session_state[hist_key], compact_hist=compact_hist)
+                st.session_state[hist_key] = hist
                 st.rerun()
 
         if len(tabs) > 1: # if filename exists, and hence the ajust tab
@@ -88,6 +95,8 @@ def autogui(
 
     if key == None:
         key=re.sub("[^a-z0-9]","-",name.lower())
+
+    hist_key = f"{key}-hist"
 
     _ = _component_func(name=name, key=key)
 
@@ -135,22 +144,22 @@ def autogui(
 
                 with gui_area.container():
                     component_value = module.fcn(**args)
-                    error_area.empty()
+#                    error_area.empty()
                     break
 
             except Exception as e:
                 if isinstance(e,ModuleNotFoundError):
-                    lacking_capabilities.append(e.split(' ')[-1])
+                    lacking_capabilities.append(e.msg.split(' ')[-1])
 
-                aicodegen.fix_code(str(e), file_name=filename)
+                aicodegen.fix_code(str(e), file_name=filename, hist=st.session_state[hist_key], compact_hist=True)
 
                 spec = importlib.util.spec_from_file_location(aicodegen.FUNCTION_NAME,str(filename))
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
 
                 p=p+1
-                st.write(p)
-                error_area.write(e)
+#                st.write(p)
+#                error_area.write(e)
 
         if len(lacking_capabilities) > 1:
             raise aicodegen.InsufficientCapabilityError(",".join(lacking_capabilities))

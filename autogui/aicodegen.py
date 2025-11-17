@@ -62,14 +62,7 @@ client = AzureOpenAI(
 )
 
 
-def is_generating():
-    try:
-        return len(get_code("hello world", system="You are a helpful assistant.")) > 0
-    except:
-        return False
-
-
-def get_code(prompt, system=SYSTEM, model="gpt-4"):
+def get_code(prompt, system=SYSTEM, model="gpt-4", hist=None, compact_hist=False):
     # Templates first, containing variables
     system = system.format(
         IO=IO,
@@ -84,17 +77,35 @@ def get_code(prompt, system=SYSTEM, model="gpt-4"):
         AVAILABLE_PKGS=",".join(list(packages_distributions().keys()))
     )
     system = system.replace("\n"," ")
-    print("SYSTEM IS",system)
+
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": prompt}
+    ]
+    if hist:
+        hist.append({"role": "user", "content": prompt})
+        messages = hist
+
+    messages_to_send = messages
+
+    # Saving tokens: always keep system and user messages, but only last assistant message.
+    if hist and compact_hist:
+        print("#################### COMPACTING HIST")
+        messages_to_send = [m for m in messages if m["role"] in ["system","user"]]
+        messages_to_send.append(messages[-2]) # last assistant answer
+        print("#################### COMPACTED HIST IS",messages_to_send)
 
     response = client.chat.completions.create(
         model=model,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": prompt}
-        ]
+        messages=messages_to_send
     )
 
-    return response.choices[0].message.content
+    messages.append({
+        "role": response.choices[0].message.role,
+        "content": response.choices[0].message.content
+    })
+
+    return response.choices[0].message.content, messages
 
 
 def update_code(code, file_name=FILE_NAME):
@@ -102,20 +113,25 @@ def update_code(code, file_name=FILE_NAME):
         f.write(code)
 
 
-def generate_code(prompt, system=SYSTEM, file_name=FILE_NAME):
-    new_code = get_code(prompt, system=SYSTEM)
+def generate_code(prompt, system=SYSTEM, file_name=FILE_NAME, hist=None, compact_hist=False):
+    new_code, hist = get_code(prompt, system=SYSTEM, hist=hist, compact_hist=compact_hist)
 
     # post processing
+    new_code = "\n".join(
+        new_code.split("\n")[1:-1]
+    ) if '```python' in new_code else new_code
     new_code = add_st_key_suffix(new_code)
 
     update_code(new_code, file_name=file_name)
-    return file_name
+    return hist
 
 
-def fix_code(error, file_name=FILE_NAME):
+def fix_code(error, file_name=FILE_NAME, hist=None, compact_hist=False):
     with open(file_name) as f:
         code = f.read()
-    generate_code(
+    prompt = (
+        f"Fix: {error}."
+        if hist and compact_hist else
         f"""The following piece of code:
 
 ```python
@@ -128,15 +144,26 @@ yields the following error:
 {error}
 ```. Generate the new version of the code with no explanations and never include
 markdown backticks. Only the code itself.
-""",
-        system=SYSTEM,
-        file_name=file_name
+"""
     )
+
+    hist = generate_code(
+        prompt,
+        system=SYSTEM,
+        file_name=file_name,
+        hist=hist,
+        compact_hist=compact_hist
+    )
+
+    return hist
     
-def add_code(prompt, file_name=FILE_NAME):
+def add_code(prompt, file_name=FILE_NAME, hist=None, compact_hist=False):
     with open(file_name) as f:
         code = f.read()
-    generate_code(
+
+    prompt = (
+        f"Keep the code above and add the following features: {prompt}"
+        if hist and compact_hist else
         f"""Keep the following piece of code:
 
 ```python
@@ -154,15 +181,25 @@ Generate the new version of the code with no explanations and never include
 markdown backticks. Only the code itself. The new features must be appended as
 the last tasks to be executed.
 
-""",
+"""
+        )
+    hist = generate_code(
+        prompt,
         system=SYSTEM,
-        file_name=file_name
+        file_name=file_name,
+        hist=hist,
+        compact_hist=compact_hist
     )
+
+    return hist
     
-def remove_code(prompt, file_name=FILE_NAME):
+def remove_code(prompt, file_name=FILE_NAME, hist=None, compact_hist=False):
     with open(file_name) as f:
         code = f.read()
-    generate_code(
+    
+    prompt = (
+        f"Remove the following features from the code above: {prompt}"
+        if hist and compact_hist else
         f"""From the following piece of code:
 
 ```python
@@ -179,10 +216,17 @@ Remove only what is referred to above. Never remove the other parts of the
 code. Generate the new version of the code with no explanations and never
 include markdown backticks. Only the code itself.
 
-""",
-        system=SYSTEM,
-        file_name=file_name
+"""
     )
+    hist = generate_code(
+        prompt,
+        system=SYSTEM,
+        file_name=file_name,
+        hist=hist,
+        compact_hist=compact_hist
+    )
+
+    return hist
 
 
 def add_st_key_suffix(code, suffix="__k"):
