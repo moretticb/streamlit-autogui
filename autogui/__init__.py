@@ -25,6 +25,9 @@ else:
     build_dir = os.path.join(parent_dir, "frontend/build")
     _component_func = components.declare_component("autogui", path=build_dir)
 
+HISTORY = 1<<0
+FULL = 1<<1
+COMPACT = 1<<2
 
 def autogui(
     name,
@@ -35,9 +38,11 @@ def autogui(
     features=None,
     patience=3,
     key=None,
+    chat_flags = HISTORY + COMPACT,
     icon=":material/touch_app:"
 ):
-
+    use_hist = (chat_flags & HISTORY) > 0
+    compact_hist = (chat_flags & COMPACT) > 0
 
     @st.dialog(f"AutoGUI {name}", width="medium")
     def gen_tool(filename):
@@ -59,11 +64,10 @@ def autogui(
             remove = False if len(btns)==1 else btns[2].button("Remove", icon=":material/remove:",key=f"{key}-remove", type="secondary", use_container_width=True)
             fix = False if len(btns)==1 else btns[3].button("Fix", icon=":material/build:",key=f"{key}-fix", type="secondary", use_container_width=True)
 
-            compact_hist=True
-
+            
             if generate:
                 hist = aicodegen.generate_code(prompt, file_name=filename, compact_hist=compact_hist)
-                st.session_state[hist_key] = hist
+                st.session_state[hist_key] = hist if use_hist else None
                 st.rerun()
 
             if add:
@@ -151,7 +155,7 @@ def autogui(
                 if isinstance(e,ModuleNotFoundError):
                     lacking_capabilities.append(e.msg.split(' ')[-1])
 
-                aicodegen.fix_code(str(e), file_name=filename, hist=st.session_state[hist_key], compact_hist=True)
+                aicodegen.fix_code(str(e), file_name=filename, hist=st.session_state[hist_key], compact_hist=compact_hist)
 
                 spec = importlib.util.spec_from_file_location(aicodegen.FUNCTION_NAME,str(filename))
                 module = importlib.util.module_from_spec(spec)
@@ -167,3 +171,7 @@ def autogui(
 
     #temp_dir.cleanup()
     return component_value
+
+autogui.HISTORY = HISTORY
+autogui.FULL = FULL
+autogui.COMPACT = COMPACT

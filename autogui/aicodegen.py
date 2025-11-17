@@ -82,30 +82,27 @@ def get_code(prompt, system=SYSTEM, model="gpt-4", hist=None, compact_hist=False
         {"role": "system", "content": system},
         {"role": "user", "content": prompt}
     ]
+
     if hist:
         hist.append({"role": "user", "content": prompt})
         messages = hist
 
-    messages_to_send = messages
+        if compact_hist:
+            # Saving tokens: keeping all system and user
+            messages = [m for m in hist[:-2] if m["role"] in ["system","user"]]
+            # and only the last assistant message, plus current message to send
+            messages = messages + hist[-2:]
 
-    # Saving tokens: always keep system and user messages, but only last assistant message.
-    if hist and compact_hist:
-        print("#################### COMPACTING HIST")
-        messages_to_send = [m for m in messages if m["role"] in ["system","user"]]
-        messages_to_send.append(messages[-2]) # last assistant answer
-        print("#################### COMPACTED HIST IS",messages_to_send)
+    response = client.chat.completions.create(model=model, messages=messages)
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=messages_to_send
-    )
+    hist = hist if hist else messages
 
-    messages.append({
+    hist.append({
         "role": response.choices[0].message.role,
         "content": response.choices[0].message.content
     })
 
-    return response.choices[0].message.content, messages
+    return response.choices[0].message.content, hist
 
 
 def update_code(code, file_name=FILE_NAME):
@@ -116,11 +113,17 @@ def update_code(code, file_name=FILE_NAME):
 def generate_code(prompt, system=SYSTEM, file_name=FILE_NAME, hist=None, compact_hist=False):
     new_code, hist = get_code(prompt, system=SYSTEM, hist=hist, compact_hist=compact_hist)
 
-    # post processing
+    # POST PROCESSING
+
+    # removing annoying markdown backticks
     new_code = "\n".join(
         new_code.split("\n")[1:-1]
     ) if '```python' in new_code else new_code
+
+    # making sure streamlit keys are unique
     new_code = add_st_key_suffix(new_code)
+
+    # end of POST PROCESSING
 
     update_code(new_code, file_name=file_name)
     return hist
