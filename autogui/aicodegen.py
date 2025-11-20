@@ -1,7 +1,8 @@
 from openai import AzureOpenAI
 import os
-from . import schema
+from . import schema, aiclient
 import re
+#import hashlib
 
 from importlib.metadata import packages_distributions
 
@@ -35,7 +36,7 @@ Never use streamlit titles or headers. If there are multiple steps, organize
 those in expanders, tabs, or small subheaders. If there are few, or a single
 task, do not enclose in any container, but simply render the due GUI elements.
 
-Make sure to preserve the definition, input, and output of functiion
+Make sure to preserve the definition, input, and output of function
 `{{FUNCTION_NAME}}`.
 
  """.replace("\n"," ")
@@ -55,14 +56,7 @@ other.
 
 SYSTEM = f"{IO} {VISUALIZATION}"
 
-client = AzureOpenAI(
-    api_key=os.getenv("OPENAI_API_KEY"),  
-    api_version="2024-05-01-preview",
-    azure_endpoint = os.getenv("OPENAI_API_BASE")
-)
-
-
-def get_code(prompt, system=SYSTEM, model="gpt-4", hist=None, compact_hist=False):
+def get_code(prompt, provider, model, system=SYSTEM, hist=None, compact_hist=False):
     # Templates first, containing variables
     system = system.format(
         IO=IO,
@@ -93,7 +87,7 @@ def get_code(prompt, system=SYSTEM, model="gpt-4", hist=None, compact_hist=False
             # and only the last assistant message, plus current message to send
             messages = messages + hist[-2:]
 
-    response = client.chat.completions.create(model=model, messages=messages)
+    response = aiclient.completions(provider, model, messages)
 
     hist = hist if hist else messages
 
@@ -108,10 +102,11 @@ def get_code(prompt, system=SYSTEM, model="gpt-4", hist=None, compact_hist=False
 def update_code(code, file_name=FILE_NAME):
     with open(file_name, "w") as f:
         f.write(code)
+    return None #hashlib.sha256(code.encode()).hexdigest()
 
 
-def generate_code(prompt, system=SYSTEM, file_name=FILE_NAME, hist=None, compact_hist=False):
-    new_code, hist = get_code(prompt, system=SYSTEM, hist=hist, compact_hist=compact_hist)
+def generate_code(prompt, provider, model, system=SYSTEM, file_name=FILE_NAME, hist=None, compact_hist=False):
+    new_code, hist = get_code(prompt, provider, model, system=SYSTEM, hist=hist, compact_hist=compact_hist)
 
     # POST PROCESSING
 
@@ -125,11 +120,11 @@ def generate_code(prompt, system=SYSTEM, file_name=FILE_NAME, hist=None, compact
 
     # end of POST PROCESSING
 
-    update_code(new_code, file_name=file_name)
-    return hist
+    digest = update_code(new_code, file_name=file_name)
+    return hist, digest
 
 
-def fix_code(error, file_name=FILE_NAME, hist=None, compact_hist=False):
+def fix_code(error, provider, model, file_name=FILE_NAME, hist=None, compact_hist=False):
     with open(file_name) as f:
         code = f.read()
     prompt = (
@@ -150,17 +145,19 @@ markdown backticks. Only the code itself.
 """
     )
 
-    hist = generate_code(
+    hist, digest = generate_code(
         prompt,
+        provider,
+        model,
         system=SYSTEM,
         file_name=file_name,
         hist=hist,
         compact_hist=compact_hist
     )
 
-    return hist
+    return hist, digest
     
-def add_code(prompt, file_name=FILE_NAME, hist=None, compact_hist=False):
+def add_code(prompt, provider, model, file_name=FILE_NAME, hist=None, compact_hist=False):
     with open(file_name) as f:
         code = f.read()
 
@@ -186,17 +183,19 @@ the last tasks to be executed.
 
 """
         )
-    hist = generate_code(
+    hist, digest = generate_code(
         prompt,
+        provider,
+        model,
         system=SYSTEM,
         file_name=file_name,
         hist=hist,
         compact_hist=compact_hist
     )
 
-    return hist
+    return hist, digest
     
-def remove_code(prompt, file_name=FILE_NAME, hist=None, compact_hist=False):
+def remove_code(prompt, provider, model, file_name=FILE_NAME, hist=None, compact_hist=False):
     with open(file_name) as f:
         code = f.read()
     
@@ -221,15 +220,17 @@ include markdown backticks. Only the code itself.
 
 """
     )
-    hist = generate_code(
+    hist, digest = generate_code(
         prompt,
+        provider,
+        model,
         system=SYSTEM,
         file_name=file_name,
         hist=hist,
         compact_hist=compact_hist
     )
 
-    return hist
+    return hist, digest
 
 
 def add_st_key_suffix(code, suffix="__k"):

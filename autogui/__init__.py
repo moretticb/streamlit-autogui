@@ -3,6 +3,7 @@ import streamlit.components.v1 as components
 import streamlit as st
 from code_editor import code_editor
 import time
+from . import aiclient
 from . import aicodegen
 from . import schema
 from pathlib import Path
@@ -32,6 +33,9 @@ COMPACT = 1<<2
 def autogui(
     name,
     init_prompt=None,
+    provider=None,
+    model=None,
+    local_scope=False,
     like=None,
     args=None,
     system=None,
@@ -47,47 +51,52 @@ def autogui(
 
     @st.dialog(f"AutoGUI {name}", width="medium")
     def gen_tool(filename):
-        tabs = [":material/code_blocks: Generate", ":material/build: Adjust"]
+        tabnames = [":material/code_blocks: Generate", ":material/build: Adjust", ":material/settings: Settings"]
+
         if filename.exists():
-            tabs = st.tabs(tabs)
             placeholder = "Describe features to generate, add, or remove. You can prompt for fixes."
         else:
-            tabs = [st.container()]
+            tabnames = [t for t in tabnames if "Adjust" not in t]
             placeholder = "Describe features to generate..."
 
-        with tabs[0]:
-            prompt = st.text_area("",placeholder=placeholder)
+        tabs = st.tabs(tabnames)
+        def tab(tabname, label=False):
+            return next((tabnames[i] if label else tabs[i] for i,t in enumerate(tabnames) if tabname.lower() in t.lower()),None)
 
-            btns = st.columns(4 if len(tabs)>1 else 1)
+        with tab("generate"):
+            try:
+                current_model = f"Prompt ({": ".join(get_provider_model())})"
+            except:
+                current_model = f":material/error: Unable to find a valid model. Please provide a valid model in **{tab('settings', label=True)}**."
+            prompt = st.text_area(current_model,placeholder=placeholder)
 
-            generate = btns[0].button("Generate", icon=":material/code_blocks:",key=f"{key}-gen", type="primary", use_container_width=True)
-            add = False if len(btns)==1 else btns[1].button("Add", icon=":material/add:",key=f"{key}-add", type="secondary", use_container_width=True)
-            remove = False if len(btns)==1 else btns[2].button("Remove", icon=":material/remove:",key=f"{key}-remove", type="secondary", use_container_width=True)
-            fix = False if len(btns)==1 else btns[3].button("Fix", icon=":material/build:",key=f"{key}-fix", type="secondary", use_container_width=True)
+            btns = st.columns(4 if tab("adjust") else 1)
 
+            cmd = {
+                "generate" : btns[0].button("Generate", icon=":material/code_blocks:",key=f"{key}-gen", type="primary", use_container_width=True),
+                "add" : False if not tab("adjust") else btns[1].button("Add", icon=":material/add:",key=f"{key}-add", type="secondary", use_container_width=True),
+                "remove" : False if not tab("adjust") else btns[2].button("Remove", icon=":material/remove:",key=f"{key}-remove", type="secondary", use_container_width=True),
+                "fix" : False if not tab("adjust") else btns[3].button("Fix", icon=":material/build:",key=f"{key}-fix", type="secondary", use_container_width=True)
+            }
+
+            for c in cmd:
+                if cmd[c]:
+                    provider,model = get_provider_model(c)
+
+                    if c=='generate':
+                        hist, digest = aicodegen.generate_code(prompt, provider, model, file_name=filename, compact_hist=compact_hist)
+                        st.session_state[hist_key] = hist if use_hist else None
+                    else:
+                        hist, digest = getattr(aicodegen,f"{c}_code")(prompt, provider, model, file_name=filename, hist=st.session_state[hist_key], compact_hist=compact_hist)
+                        st.session_state[hist_key] = hist
+
+                    st.rerun()
+                    break
             
-            if generate:
-                hist = aicodegen.generate_code(prompt, file_name=filename, compact_hist=compact_hist)
-                st.session_state[hist_key] = hist if use_hist else None
-                st.rerun()
 
-            if add:
-                hist = aicodegen.add_code(prompt, file_name=filename, hist=st.session_state[hist_key], compact_hist=compact_hist)
-                st.session_state[hist_key] = hist
-                st.rerun()
 
-            if remove:
-                hist = aicodegen.remove_code(prompt, file_name=filename, hist=st.session_state[hist_key], compact_hist=compact_hist)
-                st.session_state[hist_key] = hist
-                st.rerun()
-
-            if fix:
-                hist = aicodegen.fix_code(prompt, file_name=filename, hist=st.session_state[hist_key], compact_hist=compact_hist)
-                st.session_state[hist_key] = hist
-                st.rerun()
-
-        if len(tabs) > 1: # if filename exists, and hence the ajust tab
-            with tabs[1]:
+        if tab("adjust"):
+            with tab("adjust"):
                 st.markdown("Generated code", help=f"at `{filename}`", unsafe_allow_html=True)
                 with open(filename) as f:
                     resp = code_editor(f.read(), lang="python", options={"wrap":True, "showLineNumbers":True})
@@ -98,10 +107,86 @@ def autogui(
                     aicodegen.update_code(resp["text"], file_name=filename)
                     st.rerun()
 
+        with tab("settings"):
+            st.header("AI")
+            c1,c2 = st.columns(2)
+            try:
+                def_provider, _ = get_provider_model()
+            except:
+                def_provider = None
+            provider = c1.selectbox("Provider",[p for p in s["providers"]], index=0 if not def_provider else list(s['providers']).index(def_provider))
+            if provider:
+                disabled = len(s["providers"][provider]["warnings"])>0
+                err = "\n\n:material/error: "
+                err = err+err.join(s["providers"][provider]["warnings"]) if disabled else ""
+                st.markdown(err, unsafe_allow_html=True)
+                deployment_name = c2.text_input("Model",value=s["providers"][provider].get("default",""), disabled=disabled, help=s["providers"][provider].get('help',''))
+
+            patience = st.number_input("Patience", value=3)
+
+            st.header("Streamlit")
+            rerun = st.toggle("Refresh upon GUI change", value=True, help="This adds an extra button")
+
+            st.header("Scope")
+            apply_to = "_global" if st.checkbox("For all AutoGUI instances", value=True) else key
+
+            c1,c2 = st.columns([0.2,0.8], vertical_alignment="center")
+            if c1.button("Apply",key="autogui_apply_settings", use_container_width=True, disabled=disabled):
+                do_apply = True
+                
+                if not deployment_name:
+                    do_apply = False
+                    details = "" if "help" not in s["providers"][provider] else f"Refer to {s['providers'][provider]['help']} for more details."
+                    c2.write(f"Model name not provided. {details}")
+
+                if do_apply:
+                    s["prefs"][apply_to]["provider"] = provider
+                    s["prefs"][apply_to]["model"] = deployment_name
+                    c2.write(f"Settings applied to **{s['prefs'][apply_to]['instance']}**.")
+
+
+
     if key == None:
         key=re.sub("[^a-z0-9]","-",name.lower())
 
-    hist_key = f"{key}-hist"
+    hist_key = f"autogui-{key}-hist"
+    settings_key = 'autogui-settings'
+
+    digest=None
+    #hashkey = f"autogui-{key}-digest"
+    if settings_key not in st.session_state:
+        st.session_state[settings_key] = {}
+        s = st.session_state[settings_key]
+        s["prefs"] = {"_global":{"instance": "All"}} # _global or key
+    s = st.session_state[settings_key]
+
+    # settings
+    s["providers"] = aiclient.get_available()
+                
+    if key not in s["prefs"]:
+        s['prefs'][key] = {"instance": name}
+
+    def get_provider_model(op=None):
+        # TODO: narrow settings retrieval down to (op)eration (generate,
+        # add, remove, fix) and fall back to instance global. Fall back
+        # to _global if nothing is set.
+
+        try:
+            return s["prefs"][key]["provider"], s["prefs"][key]["model"]
+        except:
+            return s["prefs"]["_global"]["provider"], s["prefs"]["_global"]["model"]
+
+    # applying initial global settings
+    if provider and model:
+        scope = '_global' if not local_scope else key
+        s['prefs'][scope]['provider'] = provider
+        s['prefs'][scope]['model'] = s['providers'][provider]['default']
+    else:
+        for p in s['providers']:
+            if len(s['providers'][p]['warnings']) == 0 and "default" in s['providers'][p]:
+                s['prefs']['_global']['provider'] = p
+                s['prefs']['_global']['model'] = s['providers'][p]['default']
+                break
 
 
     if like==None or args==None:
@@ -121,7 +206,7 @@ def autogui(
 
     aicodegen.SCHEMA = (invars,outvars)
 
-    file_key = f"{key}-aicode"
+    file_key = f"autogui-{key}-code"
     if file_key not in st.session_state:
         st.session_state[file_key] = tempfile.TemporaryDirectory(delete=False)
 
@@ -130,12 +215,21 @@ def autogui(
     #module = str(filename.parent / filename.stem)
     module = str(filename.stem)
 
+    display_icon = icon
     if not filename.exists() and init_prompt:
-        hist = aicodegen.generate_code(init_prompt, file_name=filename, compact_hist=compact_hist)
-        st.session_state[hist_key] = hist if use_hist else None
+        try:
+            provider,model = get_provider_model()
+            hist, digest = aicodegen.generate_code(init_prompt, provider, model, file_name=filename, compact_hist=compact_hist)
+            st.session_state[hist_key] = hist if use_hist else None
+        except Exception as e:
+            display_icon = ":material/error:"
 
-    if st.button("", icon=icon, key=f"{key}-autogui-btn", use_container_width=True):
-        gen_tool(filename)
+    @st.fragment
+    def open_dialog():
+        if st.button("", icon=display_icon, key=f"{key}-autogui-btn", use_container_width=True):
+            gen_tool(filename)
+
+    open_dialog()
 
     _ = _component_func(name=name, key=key)
 
@@ -151,16 +245,21 @@ def autogui(
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
 
+                #st.session_state[hashkey] = digest
                 with gui_area.container():
                     component_value = module.fcn(**args)
+                    # TODO: render button if enabled in settings, together with fragment post processing
+                    #if st.button("apply all",key=f"autogui-{key}-frag-apply"):
+                    #    pass
 #                    error_area.empty()
-                    break
+                break
 
             except Exception as e:
                 if isinstance(e,ModuleNotFoundError):
                     lacking_capabilities.append(e.msg.split(' ')[-1])
 
-                aicodegen.fix_code(str(e), file_name=filename, hist=st.session_state[hist_key], compact_hist=compact_hist)
+                provider,model =  get_provider_model("fix")
+                aicodegen.fix_code(str(e), provider, model, file_name=filename, hist=st.session_state[hist_key], compact_hist=compact_hist)
 
                 spec = importlib.util.spec_from_file_location(aicodegen.FUNCTION_NAME,str(filename))
                 module = importlib.util.module_from_spec(spec)
