@@ -2,7 +2,8 @@ from openai import AzureOpenAI
 import os
 from . import schema, aiclient
 import re
-#import hashlib
+import ast
+import hashlib
 
 from importlib.metadata import packages_distributions
 
@@ -104,29 +105,32 @@ def update_code(code, file_name=FILE_NAME):
         f.write(code)
     return None #hashlib.sha256(code.encode()).hexdigest()
 
+def process_code(file_name=FILE_NAME, rerun=False):
+    with open(file_name, "r") as f:
+        code = f.read()
 
-def generate_code(prompt, provider, model, system=SYSTEM, file_name=FILE_NAME, hist=None, compact_hist=False):
+    hash_before = hashlib.sha256(remove_st_key_suffix(code).encode()).hexdigest()
+    code = post_processing(code, rerun=rerun)
+    hash_after = hashlib.sha256(remove_st_key_suffix(code).encode()).hexdigest()
+
+    with open(file_name, "w") as f:
+        f.write(code)
+
+    return hash_before != hash_after
+
+def generate_code(prompt, provider, model, system=SYSTEM, file_name=FILE_NAME, hist=None, compact_hist=False, rerun=False):
     new_code, hist = get_code(prompt, provider, model, system=SYSTEM, hist=hist, compact_hist=compact_hist)
 
-    # POST PROCESSING
-
-    # removing annoying markdown backticks
-    new_code = "\n".join(
-        new_code.split("\n")[1:-1]
-    ) if '```python' in new_code else new_code
-
-    # making sure streamlit keys are unique
-    new_code = add_st_key_suffix(new_code)
-
-    # end of POST PROCESSING
+    new_code = post_processing(new_code, rerun=rerun)
 
     digest = update_code(new_code, file_name=file_name)
     return hist, digest
 
 
-def fix_code(error, provider, model, file_name=FILE_NAME, hist=None, compact_hist=False):
+def fix_code(error, provider, model, file_name=FILE_NAME, hist=None, compact_hist=False, rerun=False):
     with open(file_name) as f:
         code = f.read()
+    code = preprocessing(code)
     prompt = (
         f"Fix: {error}."
         if hist and compact_hist else
@@ -152,14 +156,17 @@ markdown backticks. Only the code itself.
         system=SYSTEM,
         file_name=file_name,
         hist=hist,
-        compact_hist=compact_hist
+        compact_hist=compact_hist,
+        rerun=rerun
     )
 
     return hist, digest
     
-def add_code(prompt, provider, model, file_name=FILE_NAME, hist=None, compact_hist=False):
+def add_code(prompt, provider, model, file_name=FILE_NAME, hist=None, compact_hist=False, rerun=False):
     with open(file_name) as f:
         code = f.read()
+
+    code = preprocessing(code)
 
     prompt = (
         f"Keep the code above and add the following features: {prompt}"
@@ -190,15 +197,18 @@ the last tasks to be executed.
         system=SYSTEM,
         file_name=file_name,
         hist=hist,
-        compact_hist=compact_hist
+        compact_hist=compact_hist,
+        rerun=rerun
     )
 
     return hist, digest
     
-def remove_code(prompt, provider, model, file_name=FILE_NAME, hist=None, compact_hist=False):
+def remove_code(prompt, provider, model, file_name=FILE_NAME, hist=None, compact_hist=False, rerun=False):
     with open(file_name) as f:
         code = f.read()
     
+    code = preprocessing(code)
+
     prompt = (
         f"Remove the following features from the code above: {prompt}"
         if hist and compact_hist else
@@ -227,7 +237,8 @@ include markdown backticks. Only the code itself.
         system=SYSTEM,
         file_name=file_name,
         hist=hist,
-        compact_hist=compact_hist
+        compact_hist=compact_hist,
+        rerun=rerun
     )
 
     return hist, digest
@@ -242,4 +253,40 @@ def add_st_key_suffix(code, suffix="__k"):
         return f"{re_match.group(1)}{re_match.group(2)}__k{re_match.span()[0]}{re_match.span()[1]}{re_match.group(3)}"
 
     return re.sub(r'(key=[\'"])([^"\']+)([\'"])', gen_key_suffix, code)
+
+def remove_st_key_suffix(code, suffix="__k"):
+    return re.sub(f"{suffix}[0-9]+", "", code)
     
+
+
+def adapt_code_rerun(new_code, add=True):
+    orig_form = f"def {FUNCTION_NAME}("
+    proc_form = f"@st.fragment\ndef {FUNCTION_NAME}("
+
+    if add and new_code.find(proc_form) < 0:
+        new_code = new_code.replace(orig_form,proc_form)
+
+    if not add:
+        new_code = new_code.replace(proc_form,orig_form)
+
+    return new_code
+
+def post_processing(new_code, rerun):
+    # removing annoying markdown backticks
+    new_code = "\n".join(
+        new_code.split("\n")[1:-1]
+    ) if '```python' in new_code else new_code
+
+    # making sure streamlit keys are unique
+    new_code = add_st_key_suffix(new_code)
+
+    # Adding code snippet for the rerun feature
+    new_code = adapt_code_rerun(new_code, add=rerun)
+        
+    return new_code
+
+def preprocessing(code):
+    # removing rerun code if exists
+    code = adapt_code_rerun(code, add=False)
+    return code
+

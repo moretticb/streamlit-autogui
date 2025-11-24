@@ -85,10 +85,10 @@ def autogui(
                     provider,model = s.get_provider_model(key)
 
                     if c=='generate':
-                        hist, digest = aicodegen.generate_code(prompt, provider, model, file_name=filename, compact_hist=compact_hist)
+                        hist, digest = aicodegen.generate_code(prompt, provider, model, file_name=filename, compact_hist=compact_hist, rerun=not s.getpref("rerun",key))
                         st.session_state[hist_key] = hist if use_hist else None
                     else:
-                        hist, digest = getattr(aicodegen,f"{c}_code")(prompt, provider, model, file_name=filename, hist=st.session_state[hist_key], compact_hist=compact_hist)
+                        hist, digest = getattr(aicodegen,f"{c}_code")(prompt, provider, model, file_name=filename, hist=st.session_state[hist_key], compact_hist=compact_hist, rerun=not s.getpref("rerun",key))
                         st.session_state[hist_key] = hist
 
                     st.rerun()
@@ -100,7 +100,9 @@ def autogui(
             with tab("adjust"):
                 st.markdown("Generated code", help=f"at `{filename}`", unsafe_allow_html=True)
                 with open(filename) as f:
-                    resp = code_editor(f.read(), lang="python", options={"wrap":True, "showLineNumbers":True})
+                    code = f.read()
+                    code = aicodegen.post_processing(code, not s.getpref("rerun", key))
+                    resp = code_editor(code, lang="python", options={"wrap":True, "showLineNumbers":True})
 
                 st.markdown(":material/build: <sub>Press \u2318+Enter to apply changes.</sub>", unsafe_allow_html=True)
 
@@ -133,26 +135,42 @@ def autogui(
 
 
             st.header("Streamlit")
-            rerun = st.toggle("Refresh upon GUI change", value=s.getpref("rerun",key), help="This adds an extra button")
+            rerun = st.toggle("Refresh upon GUI change", value=s.getpref("rerun",key), help="If enabled, the whole dashboard updates after a GUI component has changed. Disable if many components must be adjusted before expecting an update. When disabled, a new button is added to effectiely apply changes when needed. Changing this setting might reset the dashboard state.")
 
-            st.header("Scope")
-            apply_to = s.GKEY if st.toggle("For all AutoGUI instances", value=True) else key
+            st.markdown("Apply changes to:")
+            #st.header("Scope")
+            #apply_to = s.GKEY if st.toggle("For all AutoGUI instances", value=True) else key
+            apply_to = None
+            
+            c12,c3 = st.columns([0.3,0.7], vertical_alignment="center")
+            c1,c2 = c12.columns([0.7,0.3], vertical_alignment="center", gap=None)
+            name_label = s.getpref(key=key).instance
+            name_label = name_label if len(name_label) < 13 else name_label[:13]+"..."
+            if c1.button(name_label,key="autogui_apply_settings_local", use_container_width=True, disabled=disabled):
+                apply_to=key
+            if c2.button("All",key="autogui_apply_settings_global", use_container_width=True, disabled=disabled):
+                apply_to=s.GKEY
 
-            c1,c2 = st.columns([0.2,0.8], vertical_alignment="center")
-            if c1.button("Apply",key="autogui_apply_settings", use_container_width=True, disabled=disabled):
+            if apply_to:
                 do_apply = True
-                
                 if not deployment_name:
                     do_apply=False
                     details = "" if "help" not in s.s.providers[provider] else f"Refer to {s.s.providers[provider]['help']} for more details."
-                    c2.write(f"Model name not provided. {details}")
+                    c3.write(f"Model name not provided. {details}")
 
                 if do_apply:
+                    do_rerun = False
+
                     s.set_provider_model(provider, deployment_name, apply_to)
                     s.setpref("patience",patience,apply_to)
-                    s.setpref("rerun",rerun,apply_to)
                     s.setpref("history",hist,apply_to)
-                    c2.write(f"Settings applied to **{s.getpref(key=apply_to).instance}**.")
+
+                    do_rerun = s.getpref("rerun",apply_to) != rerun
+                    s.setpref("rerun",rerun,apply_to)
+
+                    c3.write(f"Settings applied to **{s.getpref(key=apply_to).instance}**.")
+                    if do_rerun:
+                        st.rerun()
 
 
 
@@ -217,6 +235,9 @@ def autogui(
         p=0
         lacking_capabilities = []
         while p < patience:
+            has_changed = aicodegen.process_code(file_name=filename, rerun=not s.getpref("rerun",key))
+            if has_changed:
+                st.rerun()
             try:
                 spec = importlib.util.spec_from_file_location(aicodegen.FUNCTION_NAME,str(filename))
                 module = importlib.util.module_from_spec(spec)
@@ -225,9 +246,8 @@ def autogui(
                 #st.session_state[hashkey] = digest
                 with gui_area.container():
                     component_value = module.fcn(**args)
-                    # TODO: render button if enabled in settings, together with fragment post processing
-                    #if st.button("apply all",key=f"autogui-{key}-frag-apply"):
-                    #    pass
+                    if not s.getpref("rerun",key) and st.button("Apply",key=f"autogui-{key}-frag-apply"):
+                        pass
 #                    error_area.empty()
                 break
 
