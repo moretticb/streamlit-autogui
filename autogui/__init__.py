@@ -65,7 +65,6 @@ def autogui(
             return next((tabnames[i] if label else tabs[i] for i,t in enumerate(tabnames) if tabname.lower() in t.lower()),None)
 
         with tab("generate"):
-            current_model = f"Prompt ({": ".join(s.get_provider_model(key))})"
             try:
                 current_model = f"Prompt ({": ".join(s.get_provider_model(key))})"
             except:
