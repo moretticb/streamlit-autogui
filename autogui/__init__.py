@@ -143,6 +143,7 @@ def autogui(
                 do_apply = True
                 
                 if not deployment_name:
+                    do_apply=False
                     details = "" if "help" not in s.s.providers[provider] else f"Refer to {s.s.providers[provider]['help']} for more details."
                     c2.write(f"Model name not provided. {details}")
 
@@ -198,7 +199,6 @@ def autogui(
             hist, digest = aicodegen.generate_code(init_prompt, provider, model, file_name=filename, compact_hist=compact_hist)
             st.session_state[hist_key] = hist if use_hist else None
         except Exception as e:
-            st.write(e)
             display_icon = ":material/error:"
 
     @st.fragment
