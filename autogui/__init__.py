@@ -176,7 +176,6 @@ def autogui(
 
     # applying initial global settings
     key=s.init(name, key, provider, model, patience, rerun, history, st.session_state)
-    st.write(s.s.prefs)
     hist_key = f"autogui-{key}-hist"
 
     settings_key = 'autogui-settings'
