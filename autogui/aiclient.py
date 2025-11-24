@@ -79,3 +79,12 @@ def get_available():
                 
     #return providers
     return dict(**ready, **not_ready)
+
+
+def detect_default(s=None):
+    providers = s.providers if s else get_available()
+    for p in providers:
+        if len(providers[p]['warnings']) == 0 and "default" in providers[p]:
+            return p, providers[p]['default']
+
+    return None, None

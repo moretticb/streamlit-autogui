@@ -6,6 +6,7 @@ import time
 from . import aiclient
 from . import aicodegen
 from . import schema
+from . import settings as s
 from pathlib import Path
 import re
 
@@ -26,28 +27,28 @@ else:
     build_dir = os.path.join(parent_dir, "frontend/build")
     _component_func = components.declare_component("autogui", path=build_dir)
 
-HISTORY = 1<<0
-FULL = 1<<1
-COMPACT = 1<<2
+STATIC = 0 #1<<0
+COMPACT = 1 #1<<2
+FULL = 2 #1<<1
 
 def autogui(
     name,
     init_prompt=None,
     provider=None,
     model=None,
-    local_scope=False,
+    patience=3,
+    rerun=True,
+    history = COMPACT,
     like=None,
     args=None,
     system=None,
     system_fix=None,
     features=None,
-    patience=3,
     key=None,
-    chat_flags = HISTORY + COMPACT,
     icon=":material/touch_app:"
 ):
-    use_hist = (chat_flags & HISTORY) > 0
-    compact_hist = (chat_flags & COMPACT) > 0
+    use_hist = history == STATIC
+    compact_hist = history == COMPACT
 
     @st.dialog(f"AutoGUI {name}", width="medium")
     def gen_tool(filename):
@@ -64,8 +65,9 @@ def autogui(
             return next((tabnames[i] if label else tabs[i] for i,t in enumerate(tabnames) if tabname.lower() in t.lower()),None)
 
         with tab("generate"):
+            current_model = f"Prompt ({": ".join(s.get_provider_model(key))})"
             try:
-                current_model = f"Prompt ({": ".join(get_provider_model())})"
+                current_model = f"Prompt ({": ".join(s.get_provider_model(key))})"
             except:
                 current_model = f":material/error: Unable to find a valid model. Please provide a valid model in **{tab('settings', label=True)}**."
             prompt = st.text_area(current_model,placeholder=placeholder)
@@ -81,7 +83,7 @@ def autogui(
 
             for c in cmd:
                 if cmd[c]:
-                    provider,model = get_provider_model(c)
+                    provider,model = s.get_provider_model(key)
 
                     if c=='generate':
                         hist, digest = aicodegen.generate_code(prompt, provider, model, file_name=filename, compact_hist=compact_hist)
@@ -111,83 +113,58 @@ def autogui(
             st.header("AI")
             c1,c2 = st.columns(2)
             try:
-                def_provider, _ = get_provider_model()
+                def_provider, _ = s.get_provider_model(key)
             except:
                 def_provider = None
-            provider = c1.selectbox("Provider",[p for p in s["providers"]], index=0 if not def_provider else list(s['providers']).index(def_provider))
+            provider = c1.selectbox("Provider",[p for p in s.s.providers], index=0 if not def_provider else list(s.s.providers).index(def_provider))
             if provider:
-                disabled = len(s["providers"][provider]["warnings"])>0
+                disabled = len(s.s.providers[provider]["warnings"])>0
                 err = "\n\n:material/error: "
-                err = err+err.join(s["providers"][provider]["warnings"]) if disabled else ""
+                err = err+err.join(s.s.providers[provider]["warnings"]) if disabled else ""
                 st.markdown(err, unsafe_allow_html=True)
-                deployment_name = c2.text_input("Model",value=s["providers"][provider].get("default",""), disabled=disabled, help=s["providers"][provider].get('help',''))
+                deployment_name = c2.text_input("Model",value=s.s.providers[provider].get("default",""), disabled=disabled, help=s.s.providers[provider].get('help',''))
 
-            patience = st.number_input("Patience", value=3)
+
+            c1,c2,c3 = st.columns(3)
+            patience = c1.number_input("Patience", value=s.getpref("patience",key), min_value=1, max_value=100)
+
+            hist_opt = ["Static","Compact","Full"]
+            hist=c3.selectbox("Prompt history", hist_opt, index=s.getpref("history",key), help="Format of chat history. Choose `Static` for one-time or few requests, `Compact` for multiple chained requests (e.g., generate, then add/remove/fix multiple times), or `Full` to preserve the whole verbosy history. Notice that the longer the history, the more expensive it is (cost and time wise).")
+            hist=hist_opt.index(hist)
+
 
             st.header("Streamlit")
-            rerun = st.toggle("Refresh upon GUI change", value=True, help="This adds an extra button")
+            rerun = st.toggle("Refresh upon GUI change", value=s.getpref("rerun",key), help="This adds an extra button")
 
             st.header("Scope")
-            apply_to = "_global" if st.checkbox("For all AutoGUI instances", value=True) else key
+            apply_to = s.GKEY if st.toggle("For all AutoGUI instances", value=True) else key
 
             c1,c2 = st.columns([0.2,0.8], vertical_alignment="center")
             if c1.button("Apply",key="autogui_apply_settings", use_container_width=True, disabled=disabled):
                 do_apply = True
                 
                 if not deployment_name:
-                    do_apply = False
-                    details = "" if "help" not in s["providers"][provider] else f"Refer to {s['providers'][provider]['help']} for more details."
+                    details = "" if "help" not in s.s.providers[provider] else f"Refer to {s.s.providers[provider]['help']} for more details."
                     c2.write(f"Model name not provided. {details}")
 
                 if do_apply:
-                    s["prefs"][apply_to]["provider"] = provider
-                    s["prefs"][apply_to]["model"] = deployment_name
-                    c2.write(f"Settings applied to **{s['prefs'][apply_to]['instance']}**.")
+                    s.set_provider_model(provider, deployment_name, apply_to)
+                    s.setpref("patience",patience,apply_to)
+                    s.setpref("rerun",rerun,apply_to)
+                    s.setpref("history",hist,apply_to)
+                    c2.write(f"Settings applied to **{s.getpref(key=apply_to).instance}**.")
 
 
 
-    if key == None:
-        key=re.sub("[^a-z0-9]","-",name.lower())
-
+    # applying initial global settings
+    key=s.init(name, key, provider, model, patience, rerun, history, st.session_state)
+    st.write(s.s.prefs)
     hist_key = f"autogui-{key}-hist"
+
     settings_key = 'autogui-settings'
 
     digest=None
     #hashkey = f"autogui-{key}-digest"
-    if settings_key not in st.session_state:
-        st.session_state[settings_key] = {}
-        s = st.session_state[settings_key]
-        s["prefs"] = {"_global":{"instance": "All"}} # _global or key
-    s = st.session_state[settings_key]
-
-    # settings
-    s["providers"] = aiclient.get_available()
-                
-    if key not in s["prefs"]:
-        s['prefs'][key] = {"instance": name}
-
-    def get_provider_model(op=None):
-        # TODO: narrow settings retrieval down to (op)eration (generate,
-        # add, remove, fix) and fall back to instance global. Fall back
-        # to _global if nothing is set.
-
-        try:
-            return s["prefs"][key]["provider"], s["prefs"][key]["model"]
-        except:
-            return s["prefs"]["_global"]["provider"], s["prefs"]["_global"]["model"]
-
-    # applying initial global settings
-    if provider and model:
-        scope = '_global' if not local_scope else key
-        s['prefs'][scope]['provider'] = provider
-        s['prefs'][scope]['model'] = s['providers'][provider]['default']
-    else:
-        for p in s['providers']:
-            if len(s['providers'][p]['warnings']) == 0 and "default" in s['providers'][p]:
-                s['prefs']['_global']['provider'] = p
-                s['prefs']['_global']['model'] = s['providers'][p]['default']
-                break
-
 
     if like==None or args==None:
         name, invars, outvars, system, args = schema.from_parent_caller()
@@ -218,10 +195,11 @@ def autogui(
     display_icon = icon
     if not filename.exists() and init_prompt:
         try:
-            provider,model = get_provider_model()
+            provider,model = s.get_provider_model(key)
             hist, digest = aicodegen.generate_code(init_prompt, provider, model, file_name=filename, compact_hist=compact_hist)
             st.session_state[hist_key] = hist if use_hist else None
         except Exception as e:
+            st.write(e)
             display_icon = ":material/error:"
 
     @st.fragment
@@ -258,7 +236,7 @@ def autogui(
                 if isinstance(e,ModuleNotFoundError):
                     lacking_capabilities.append(e.msg.split(' ')[-1])
 
-                provider,model =  get_provider_model("fix")
+                provider,model =  s.get_provider_model()
                 aicodegen.fix_code(str(e), provider, model, file_name=filename, hist=st.session_state[hist_key], compact_hist=compact_hist)
 
                 spec = importlib.util.spec_from_file_location(aicodegen.FUNCTION_NAME,str(filename))
@@ -276,6 +254,6 @@ def autogui(
     #temp_dir.cleanup()
     return component_value
 
-autogui.HISTORY = HISTORY
+autogui.STATIC = STATIC
 autogui.FULL = FULL
 autogui.COMPACT = COMPACT
