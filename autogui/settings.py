@@ -47,7 +47,7 @@ def init(name, key, provider, model, patience, rerun, history, store_in, setting
         setpref("rerun", rerun, key)
         setpref("history", history, key) 
 
-    return key
+    return key, actual_init
 
 
 def get_instance(key):

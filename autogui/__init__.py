@@ -175,10 +175,10 @@ def autogui(
 
 
     # applying initial global settings
-    key=s.init(name, key, provider, model, patience, rerun, history, st.session_state)
+    key, actual_init = s.init(name, key, provider, model, patience, rerun, history, st.session_state)
     hist_key = f"autogui-{key}-hist"
-
     settings_key = 'autogui-settings'
+
 
     digest=None
     #hashkey = f"autogui-{key}-digest"
@@ -187,10 +187,6 @@ def autogui(
         name, invars, outvars, system, args = schema.from_parent_caller()
     else:
         name, invars, outvars = schema.from_func(like)
-
-    component_value = None
-    if len(outvars) > 1:
-        component_value = (None for _ in outvars)
 
     #aicodegen.FUNCTION_NAME = name
     if system:
@@ -224,8 +220,12 @@ def autogui(
             gen_tool(filename)
 
     open_dialog()
-
     _ = _component_func(name=name, key=key)
+
+    component_value = None
+    if len(outvars) > 1:
+        component_value = (None for _ in outvars)
+
 
     gui_area = st.empty()
     error_area = st.empty()
@@ -245,8 +245,8 @@ def autogui(
                 #st.session_state[hashkey] = digest
                 with gui_area.container():
                     component_value = module.fcn(**args)
-                    if not s.getpref("rerun",key) and st.button("Apply",key=f"autogui-{key}-frag-apply"):
-                        pass
+                    if not s.getpref("rerun",key) and st.button(f"Run {s.getpref(key=key).instance}",key=f"autogui-{key}-frag-apply"):
+                        pass # Using button to rerun
 #                    error_area.empty()
                 break
 

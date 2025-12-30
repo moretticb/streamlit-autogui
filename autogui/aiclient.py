@@ -76,6 +76,9 @@ def get_available():
         p["warnings"] = warnings
 
         triage[provider] = p
+
+    if len(ready) == 0:
+        raise Exception("Unable to find provider and model. Make sure parameters `provider` and `model` are set in autogui().")
                 
     #return providers
     return dict(**ready, **not_ready)

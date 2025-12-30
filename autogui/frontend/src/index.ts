@@ -43,8 +43,8 @@ function rerenderButton(){
       visibleComponentDiv.style.height="1px";
     }
 
-    if (btn.childNodes.length == 1) {
-      const lbl = btn.appendChild(document.createElement("span"))
+    if (btn.childNodes.length == 1 && btn.childNodes[0].childNodes.length == 1) {
+      const lbl = btn.childNodes[0].appendChild(document.createElement("span"))
       lbl.appendChild(document.createTextNode(`Shift + ${(instance_num ?? 0) + 1} to edit`));
       lbl.style.textIndent = "10px";
       lbl.style.fontSize = "12px";
