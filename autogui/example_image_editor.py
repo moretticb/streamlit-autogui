@@ -14,7 +14,7 @@ tab_load, tab_proc, tab_orig = preview.tabs(["Upload", "Processed", "Original"])
 def load_image() -> np.ndarray:
     """ {IO} """
 
-    loaded_img = autogui("Image load testing tes", init_prompt="upload file")
+    loaded_img = autogui("Image load testing tes", init_prompt="upload file", model="MODEL_NAME", provider="PROVIDER_NAME")
     return loaded_img
 
 with tab_load:
@@ -38,13 +38,13 @@ to the image. Never hide the components.
 
 """
 
-    proc_img = autogui("Pipeline", history=autogui.STATIC, init_prompt="Brightness and contrast\n\nblack and white\n\ncrop")
+    proc_img = autogui("Pipeline", history=autogui.STATIC, init_prompt="Brightness and contrast\n\nblack and white\n\ncrop", model="MODEL_NAME", provider="PROVIDER_NAME")
     return proc_img
 
 def view_img(img: np.ndarray) -> None:
     """ {IO} {VISUALIZATION} """
 
-    autogui("img view", init_prompt="display image")
+    autogui("img view", init_prompt="display image", model="MODEL_NAME", provider="PROVIDER_NAME")
     return None
 
 
