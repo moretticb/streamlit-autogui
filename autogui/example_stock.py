@@ -39,7 +39,7 @@ forecast (if exists) with column `Price`, build a plot of the price over time
 plot it.
     """
 
-    plotly_fig = autogui("Stock price plot", init_prompt="plot price curve with candle stick or simple line. Also add a checkbox to whether or not plot the prediction in dashed line")
+    plotly_fig = autogui("Stock price plot", init_prompt="plot price curve with candle stick or simple line. Also add a checkbox to whether or not plot the prediction in dashed line", model="MODEL_NAME", provider="PROVIDER_NAME")
     return plotly_fig
 
 
@@ -55,7 +55,7 @@ and avoid data leakage and do not use tensorflow. Always return a dataframe,
 never a figure or any kind of plot.
     """
 
-    prices = autogui("Forecasting", init_prompt="predict future prices based on dynamic systems. make forecast horizon customizable, as well as all other involve parameters")
+    prices = autogui("Forecasting", init_prompt="predict future prices based on dynamic systems. make forecast horizon customizable, as well as all other involve parameters", model="MODEL_NAME", provider="PROVIDER_NAME")
 
     return prices
 
