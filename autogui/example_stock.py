@@ -1,78 +1,143 @@
 import streamlit as st
+import plotly
+import plotly.express as px
+import plotly.graph_objects as go
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error
+import yfinance as yf
+from datetime import datetime, timedelta
+import pytz
+import ta
 
-# Load dataset
-@st.cache
-def load_data():
-    return pd.read_csv('https://raw.githubusercontent.com/datasets/finance-vix/main/data/vix-daily.csv')
+from autogui import autogui
 
-data = load_data()
+def get_data(ticker, period, interval):
+    data = (
+        yf.Ticker(ticker)
+        .history(interval=interval,period=period)
+    ).reset_index()
+    return data
 
-# Dashboard title
-st.title("Finance Analytics Dashboard")
 
-# Display dataset
-st.subheader("Dataset Preview")
-st.write(data.head())
+def process_data(data):
+    data.rename(columns={'Date': 'Datetime'}, inplace=True)
+    return data
+    if data.index.tzinfo is None:
+        data.index = data.index.tz_localize('UTC')
+    data.index = data.index.tz_convert('US/Eastern')
+#    data.reset_index(inplace=True)
+    data.rename(columns={'Date': 'Datetime'}, inplace=True)
+    return data
 
-# Sidebar for user input
-st.sidebar.header("Filter Options")
-start_date = st.sidebar.date_input("Start Date", value=pd.to_datetime(data['Date'].min()))
-end_date = st.sidebar.date_input("End Date", value=pd.to_datetime(data['Date'].max()))
 
-# Filter data
-filtered_data = data[(pd.to_datetime(data['Date']) >= start_date) & (pd.to_datetime(data['Date']) <= end_date)]
 
-# Display filtered data
-st.subheader("Filtered Dataset")
-st.write(filtered_data)
+def stock_plot(data: pd.DataFrame, forecast: pd.DataFrame = None) -> plotly.graph_objs.Figure:
+    """
+    {IO}{VISUALIZATION} You are also a specialist in stock market. Given a
+dataframe with typical stock price columns and Date, and another dataframe
+forecast (if exists) with column `Price`, build a plot of the price over time
+(Close price) and a dashed line for forecasting. Provide the figure but never
+plot it.
+    """
 
-# Visualization
-st.subheader("Visualizations")
+    plotly_fig = autogui("Stock price plot", init_prompt="plot price curve with candle stick or simple line. Also add a checkbox to whether or not plot the prediction in dashed line")
+    return plotly_fig
 
-# Line Chart
-st.write("VIX Closing Price Over Time")
-fig, ax = plt.subplots()
-ax.plot(pd.to_datetime(filtered_data['Date']), filtered_data['VIX Close'], label='VIX Close', color='blue')
-ax.set_xlabel("Date")
-ax.set_ylabel("VIX Close")
-ax.legend()
-plt.xticks(rotation=45)
-st.pyplot(fig)
 
-# Machine Learning Prediction
-st.subheader("Machine Learning Prediction")
+    
 
-# Prepare data
-filtered_data['Date'] = pd.to_datetime(filtered_data['Date'])
-filtered_data['Date_ordinal'] = filtered_data['Date'].map(lambda x: x.toordinal())
-X = filtered_data[['Date_ordinal']]
-y = filtered_data['VIX Close']
+def stock_forecast(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    {IO} You are a specialist in implementing time series forecasting solutions
+from a given stock price dataframe which has the typical data columns.
+Solutions must provide another dataframe as output, with the prediction curve
+under columns `Date` and `Price`. Make sure to keep dates in the right format
+and avoid data leakage and do not use tensorflow. Always return a dataframe,
+never a figure or any kind of plot.
+    """
 
-# Split data
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    prices = autogui("Forecasting", init_prompt="predict future prices based on dynamic systems. make forecast horizon customizable, as well as all other involve parameters")
 
-# Train model
-model = RandomForestRegressor(n_estimators=100, random_state=42)
-model.fit(X_train, y_train)
+    return prices
 
-# Predict
-y_pred = model.predict(X_test)
 
-# Display results
-st.write("Mean Squared Error:", mean_squared_error(y_test, y_pred))
 
-# Prediction Visualization
-st.write("Predicted vs Actual Values")
-fig, ax = plt.subplots()
-ax.scatter(y_test, y_pred, color='green', label='Predicted vs Actual')
-ax.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], color='red', label='Ideal Fit')
-ax.set_xlabel("Actual Values")
-ax.set_ylabel("Predicted Values")
-ax.legend()
-st.pyplot(fig)
+
+st.set_page_config(layout="wide")
+header_area = st.empty()
+tab_graph, tab_data = st.tabs(["Graph","Data"])
+
+st.sidebar.header('Graph')
+
+c1,c2 = st.sidebar.columns([0.3,0.7])
+
+def_ticker = 'ADBE'
+ticker = c1.text_input('Ticker', def_ticker)
+ticker = ticker if ticker else def_ticker
+
+periods = ['1d', '1wk', '1mo', '1y', 'max']
+time_period = c2.select_slider('Time Period',periods, value='1y')
+intervmap = dict(d='1m', wk='30m', mo='1d', y='1wk', ax='1wk')
+time_interval = intervmap.get(time_period[1:])
+time_interval = c2.select_slider('Time interval (granularity)',set(intervmap.values()),value=intervmap.get(time_period[1:]))
+
+plot_config = st.sidebar.container()
+
+data = get_data(ticker, time_period, time_interval)
+#data = process_data(data)
+
+if data.shape[0] <= 1:
+    c2.markdown(":material/error: <sub>Interval not available.</sub>", unsafe_allow_html=True)
+    st.stop()
+
+
+st.sidebar.header('Forecasting')
+
+
+with st.sidebar:
+    fore_data = stock_forecast(data)
+    tab_data.subheader('Forecast')
+    tab_data.write(fore_data)
+
+with plot_config:
+    fig = stock_plot(data, fore_data)
+
+if fig:
+    tab_graph.plotly_chart(fig, use_container_width=True)
+
+
+
+
+# METRICS FOR CURRENT TICKER
+c1,c2,c3,c4 = tab_graph.columns(4)
+
+last_close = data['Close'].iloc[-1]
+prev_close = data['Close'].iloc[0]
+change = last_close - prev_close
+c1.metric(
+    label=f"Last Price",
+    value=f"{last_close:.2f} USD",
+    delta=f"{change:.2f} ({(change / prev_close) * 100:.2f}%)"
+)
+c2.metric("High", f"{data['High'].max():.2f} USD")
+c3.metric("Low", f"{data['Low'].min():.2f} USD")
+c4.metric("Volume", f"{data['Volume'].sum():,}")
+
+
+
+tab_data.subheader('Historical Data')
+tab_data.dataframe(data.set_index('Date')[['Open', 'High', 'Low', 'Close', 'Volume']])
+
+
+
+# METRICS FROM TICKERS ON THE HEADER
+stock_symbols = ['AAPL', 'GOOGL', 'AMZN', 'MSFT', 'NVDA']
+cols = header_area.columns(len(stock_symbols))
+for i,symbol in enumerate(stock_symbols):
+    real_time_data = get_data(symbol, '1d', '1m')
+    if not real_time_data.empty:
+        last_price = float(real_time_data['Close'].values[-1])
+        change = float(last_price - real_time_data['Open'].values[0])
+        pct_change = (change / float(real_time_data['Open'].values[0])) * 100
+        cols[i].metric(f"{symbol}", f"{last_price:.2f} USD", f"{change:.2f} ({pct_change:.2f}%)")
+
+
