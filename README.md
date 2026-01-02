@@ -59,12 +59,13 @@ if result != None:
 
 
 <table>
+<tr><th colspan="2">Function signature:<th></tr>
 <tr>
 <td colspan="2">
-Function signature: <code>autogui.autogui(name, init_prompt=None, provider=None, model=None, patience=3, rerun=True, history=COMPACT, features=None, key=None, icon=":material/touch_app:")</code>
+<code>autogui.autogui(name, init_prompt=None, provider=None, model=None, patience=3, rerun=True, history=COMPACT, features=None, key=None, icon=":material/touch_app:")</code>
 </td>
 </tr>
-
+<tr><th colspan="2">Parameters:<th></tr>
 <tr>
 	<td><code>name</code> (<code>str</code>)</td>
 	<td>the name of the AutoGUI widget.</td>
@@ -108,8 +109,9 @@ Function signature: <code>autogui.autogui(name, init_prompt=None, provider=None,
 	<td><code>icon</code> (<code>str</code>)</td>
 	<td>the (optional) icon to be displayed in the widget button. If set, must be one of the Material Symbols library (rounded style) in the format <code>":material/icon_name:"</code>, where <code>"icon_name"</code> is the name of the icon in snake case. Defaults to <code>":material/touch_app:"</code>.</td>
 </tr>
+<tr><th colspan="2">Returns:<th></tr>
 <tr>
-	<td colspan="2">Returns a <code>list[Any]</code> or <code>Any</code>, depending on the schema defined by the user.</td>
+	<td colspan="2"><code>list[Any]</code> or <code>Any</code>, depending on the schema defined by the user.</td>
 </tr>
 </table>
 
