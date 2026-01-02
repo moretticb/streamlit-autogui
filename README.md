@@ -75,7 +75,7 @@ Function signature: <code>autogui.autogui(name, init_prompt=None, provider=None,
 </tr>
 <tr>
 	<td><code>provider</code> (<code>str</code>)</td>
-	<td>the provider of the AI model to be used. If <code>None</code>, AutoGUI will attempt to [fetch](https://github.com/moretticb/streamlit-autogui/blob/main/autogui/providers.json) the first provider of which the due packages and variables are set. Defaults to <code>None</code>.</td>
+	<td>the provider of the AI model to be used. If <code>None</code>, AutoGUI will attempt to <a href="https://github.com/moretticb/streamlit-autogui/blob/main/autogui/providers.json">fetch</a> the first provider of which the due packages and variables are set. Defaults to <code>None</code>.</td>
 </tr>
 <tr>
 	<td><code>model</code> (<code>str</code>)</td>
@@ -87,7 +87,7 @@ Function signature: <code>autogui.autogui(name, init_prompt=None, provider=None,
 </tr>
 <tr>
 	<td><code>rerun</code> (<code>bool</code>)</td>
-	<td>Whether to refresh upon any UI change, Streamlit style. If <code>False</code>, an extra button will be rendered to trigger the generated code, which gets encapsulated in a [fragment](https://docs.streamlit.io/develop/api-reference/execution-flow/st.fragment). Defaults to <code>True</code>.</td>
+	<td>Whether to refresh upon any UI change, Streamlit style. If <code>False</code>, an extra button will be rendered to trigger the generated code, which gets encapsulated in a <a href="https://docs.streamlit.io/develop/api-reference/execution-flow/st.fragment">fragment</a>. Defaults to <code>True</code>.</td>
 </tr>
 <tr>
 	<td><code>history</code> (<code>int</code>)</td>
