@@ -47,6 +47,26 @@ def autogui(
     key=None,
     icon=":material/touch_app:"
 ):
+    """
+    Renders an AutoGUI widget.
+
+    Arguments:
+    - name:str: the name of the AutoGUI widget.
+    - init_prompt:str: the initial prompt to be defined programmatically. If set, `init_prompt` will be run as the app is rendered. If `None`, the initial prompt must be inserted via user interface. Defaults to `None`.
+    - provider:str: the provider of the AI model to be used. If `None`, AutoGUI will attempt to fetch the first provider of which the due packages and variables are set. Defaults to `None`.
+    - model:str: the deployment name of the model (from `provider`) to be used. Code is less error prone when this is set. Defaults to `None`.
+    - patience:int: the number of attempts to correct the generated code if it comes broken before raising errors. Defaults to `3`.
+    - rerun:bool: Whether to refresh upon any UI change, Streamlit style. If `False`, an extra button will be rendered to trigger the generated code, which gets encapsulated in a Streamlit fragment. Defaults to `True`.
+    - history int: the level of verbosity on how to handle the internal chat history. Takes the following flags:
+            - autogui.STATIC: No context/history is kept. Ideal for single calls and simplistic follow-up.
+            - autogui.FULL: Keeps full chat history. This can become expensive (time and cost wise) as history grows, since every new version of the code is kept.
+            - autogui.COMPACT: Keeps only messages with `system` and `user` roles, plus the very last message from `assistant` (i.e., the generated code) for context. Ideal for following up, as previous fixes are taken into account for next iterations.
+            Defaults to flag `autogui.COMPACT`.
+    - key:str: the (optional) Streamlit `key` parameter. If not set, a key will be generated based on `name`. Must be set only when two AutoGUI widgets have the same `name`.
+    - icon:str: the (optional) icon to be displayed in the widget button. If set, must be one of the Material Symbols library (rounded style) in the format `":material/icon_name:"`, where `"icon_name"` is the name of the icon in snake case. Defaults to `":material/touch_app:"`.
+
+    Returns a `list[Any]` or `Any`, depending on the schema defined by the user.
+    """
     use_hist = history == STATIC
     compact_hist = history == COMPACT
 
